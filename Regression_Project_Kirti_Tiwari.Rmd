@@ -1,0 +1,492 @@
+---
+title: "Regression_Project_Kirti_Tiwari"
+author: "Kirti Tiwari"
+date: "10/20/2019"
+output: word_document
+---
+
+
+# Preprocessing
+# Question 1 : Data Loading
+```{r}
+rm(list=ls())
+library(rio)
+library(car)
+setwd("~/USF/Kirti/USF CourseWork/2nd Sem/QMB-6304")
+taxitrips=import("6304 Regression Project Data.csv")
+colnames(taxitrips)=tolower(make.names(colnames(taxitrips)))
+attach(taxitrips)
+str(taxitrips)
+names(taxitrips)
+
+```
+# Question 2: Creating subset of 100 random records
+
+```{r}
+set.seed(09448090)
+subset.taxitrips=taxitrips[sample(1:nrow(taxitrips),100,replace=FALSE),]
+
+```
+
+# Question 3 : Data Cleaning
+
+```{r}
+# Checking for missing values if any.
+summary(subset.taxitrips)
+# If the mean of the column returns NA then the data is having NULL/ NA values. But since the means which my data is return are proper and not NA, so it means that the subset is not having any missing values.
+
+# Checking if there are any 0 values in trip_seconds, because in ideal scenario trip_seconds should not be zero.If a trip was taken or even started there should be some elapsed time associated with it.
+zero_tripseconds = subset.taxitrips[which(subset.taxitrips$trip_seconds == 0.0) ,]
+zero_tripseconds
+# 14 such records are found, which seems to be bad data, so I will remove them from my subset.
+nonzero.taxitrips = subset.taxitrips[-which(subset.taxitrips$trip_seconds == 0.0) ,]
+
+# After removing 0 values from trip_seconds, checking if there are any 0 values in trip_miles.
+zero_tripmiles = nonzero.taxitrips[which(nonzero.taxitrips$trip_miles == 0.0 ),]
+zero_tripmiles
+# Based on the data it looks like that the trip was actually started and there is some fare associated with it. It might be possible that the trip started and the taxi was kept on waiting and probably the trip was cancelled later. So, these cases seems to be the valid scenario, so I keep them as is and wont remove from my data.
+
+# For the remaining columns 0 value seems to be fine and valid.
+# So after removing 14 records for 0 trip_seconds, we have 86 observations in the dataset now.
+
+# Checking outliers in the data.
+# Outliers for trip_seconds
+
+par(mfrow=c(1,2))
+outliers_ts =boxplot(nonzero.taxitrips$trip_seconds,main="trip_seconds_before")$out
+outliers_ts
+# We have 2 huge outlier values (48900,3120) which are way to high and because of those the model results will be impacted.
+
+# Removing outliers for trip_seconds from the dataset
+clean.taxitrips = nonzero.taxitrips[-which(nonzero.taxitrips$trip_seconds %in% outliers_ts),]
+boxplot(clean.taxitrips$trip_seconds,main="trip_seconds_after")$out
+par(mfrow=c(1,1))
+
+# Checking outliers for trip_miles
+par(mfrow=c(1,2))
+outliers_tm = boxplot(clean.taxitrips$trip_miles,main="trip_miles_before")$out
+outliers_tm
+# Removing outliers for trip_miles from the dataset
+clean.taxitrips = clean.taxitrips[-which(clean.taxitrips$trip_miles %in% outliers_tm),]
+boxplot(clean.taxitrips$trip_miles,main="trip_miles_after")$out
+par(mfrow=c(1, 1))
+
+# Checking outliers for fare
+par(mfrow=c(1,2))
+boxplot(clean.taxitrips$fare,main="fare_before")$out
+# Removing 2 extreme outliers for fare from the dataset
+clean.taxitrips = clean.taxitrips[-which(clean.taxitrips$fare == 43.50),]
+clean.taxitrips = clean.taxitrips[-which(clean.taxitrips$fare == 34.75),]
+boxplot(clean.taxitrips$fare,main="fare_after")$out
+par(mfrow=c(1, 1))
+
+# After cleaning Outliers from trip_seconds, trip_miles and fare, checking outliers for remaining variables.
+boxplot(clean.taxitrips$tips,main="tips")$out
+# No outliers for tips
+boxplot(clean.taxitrips$tolls,main="tolls")$out
+# No outliers for tolls
+boxplot(clean.taxitrips$extras,main="extras")$out
+# No outliers for extras
+boxplot(clean.taxitrips$trip_total,main="trip_total")$out
+# 4 outliers for trip_total but there are not very extreme, so I will keep them as is.
+```
+# So finally we are left with 67 observations which is the primary dataset for analysis
+
+
+# Analysis Based on clean sample data
+# Question 1: Summary & Density Plots for all continous variables
+```{r}
+# trip_seconds
+summary(clean.taxitrips$trip_seconds)
+plot(density(clean.taxitrips$trip_seconds),lwd=3, main="Density Plot of trips_seconds")
+# Based on the above density plot for trip_seconds ,the plot is approximately normal with most of the values concentrated around the mean (around 500) but it also has some extreme values (>1000) at the tail in right and hence it is right skewed rather than normally distributed
+```
+.
+```{r}
+#trip_miles
+summary(clean.taxitrips$trip_miles)
+plot(density(clean.taxitrips$trip_miles),lwd=3, main="Density Plot of trips_miles")
+# The trip_miles density plot shows majority of values are accumulated below mean (~1) and has many extreme values present at the tail on the right side, so it is also skewed right
+```
+.
+```{r}
+# fare
+summary(clean.taxitrips$fare)
+plot(density(clean.taxitrips$fare),lwd=3, main="Density Plot of fare")
+# The density plot for fare is bimodal ( i.e. 2 peaks) ,with the tail extending towards right and hence skewed towards right
+```
+.
+```{r}
+# tips
+summary(clean.taxitrips$tips)
+plot(density(clean.taxitrips$tips),lwd=3, main="Density Plot of tips")
+# The density plot for tips is also bimodal but the one of the peaks is much lower than the other. Most of the values are concentrated around the 1st peak which are less than 1 making model look like more normally distributed, but we have another peak at around 2 and some extreme values after that which could possibly can be considered as outliers and because of those the model is skewed towards right. 
+```
+.
+```{r}
+# tolls
+summary(clean.taxitrips$tolls)
+# There is no data in tolls so there is no use of generating the denisty plot for it.
+```
+```{r}
+# extras
+summary(clean.taxitrips$extras)
+plot(density(clean.taxitrips$extras),lwd=3, main="Density Plot of extras")
+# Similary for extras, based on the density plot it is bimodel as it has 2 peaks and because of more values concentrated towards right, it is skewed right
+```
+.     
+```{r}
+# trip_total
+summary(clean.taxitrips$trip_total)
+plot(density(clean.taxitrips$trip_total),lwd=3, main="Density Plot of trip_total")
+# The density plot for trip_total is also bimodal but the one of the peaks is much lower than the other. Most of the values are concentrated around the 1st peak which equal to the mean (~8.7) making model look like more normally distributed and we also some extreme values after that  because of which model is skewed more towards right. 
+```
+
+# Question 2: number of cases in each level of payment_type
+
+```{r}
+# can use library plyr to get the count of the each cases 
+library(plyr)
+count(clean.taxitrips, vars=c("payment_type"))
+# can use table function to get the count
+table(clean.taxitrips$payment_type)
+
+```
+
+# Question 3: correlation matrix using all continuous variables except taxi_id. Also removing payment_type as it is categorical variable and tolls because there is no data 
+
+```{r}
+library(corrplot)
+cor(clean.taxitrips[-c(1,6,9)])
+corrplot(cor(clean.taxitrips[-c(1,6,9)]))
+ 
+#A correlation matrix is a table showing correlation coefficients between variables. Each cell in the table shows the correlation between two variables. Bigger and darker coloured circles indicate higher correlation whereas smaller and lighter coloured circles indicate lower correlation. Blue is for positive and red colour represents negative correlation.The diagonal can be ignored as it shows the correlation of a variable with itself.So,the diagonal has dark blue with large size indicating a correlation of 1(The variable with itself). Further we can see the next bigger and darker circle is between fare and trip_total and it shows they are highly correlated followed by circle between trip_seconds and fare. As the circle becomes smaller lighter blue in color it means they don't have strong correlation between them. For ex: the circle between tips and trip_miles is very small and too faded, which means they both are very weakly correlated. There are some circles which have red color, for ex : between trip_seconds and extras, which means correlation between them is negative. And if the value of one increase then others will decrease. The blue ones are positively correlated and if value of one increases others will also increase and the intensity of increase will depend on the strength of the correlation.
+```
+
+# Question 4:	Using fare as the dependent variable,build a regression model using trip_seconds, trip_miles, and payment_type as potential independent variables
+
+
+```{r}
+taxitrips.out=lm(fare~trip_seconds+trip_miles+payment_type, data=clean.taxitrips)
+summary(taxitrips.out)
+```
+Interpretation:
+
+The regression equation will be:
+fare= 3.174+0. 0.0082*trip_seconds +0.175*trip_miles +0.618*payment_type
+
+
+Based on the above results, the intercept and trip_seconds are significant (as p-values < 0.05) whereas trip_miles and payment_type are insignificant (p-value=0.435 and 0.109 respectively which are greater than 0.05). We may say that based on this model might not be a strong relationship between fare and trip_miles and payment_type.
+
+For Intercept :
+
+Based on the model the beta coefficient is 3.1738797 and p-value is 8.45e-14 which is way too lower than .05 (approx. to 0) so we can reject the null hypothesis (intercept = 0) as based on the p-value we are sure that intercept is not equal to 0
+
+For Slopes :
+
+trip_seconds : 
+As the slope is positive, there is positive correlation between fare and trip_seconds. Everytime with the increase of 1000 seconds there will be increase in fare by 8.2 dollars.As the p-value is 2e-16 way to less than 0.05 , so we can reject the null hypothesis (slope = 0) and trip_seconds is having very significant impact on fare.
+
+trip_miles:
+
+Here also, the slope is positive, so we have positive correlation between trip_miles and fare. But it is not having much significant contribution to the model as p-value is >0.05
+
+payment_type:
+
+Here also, the slope is positive, so we have positive correlation between payment_type and fare. But it is not having much significant contribution to the model as p-value is >0.05
+
+```{r}
+confint(taxitrips.out)
+```
+As shown above p-value for the coefficients for intercept and trip_seconds are < 0.05 so they are rejecting the null hypothesis and we can say based on their confidence intervals none of them is crossing 0 and there is significant impact of these coefficient on the charges.
+
+•	For a trip with zero trip_seconds, zero trip_miles and payment_type, fare could be anywhere from 2.5 to 3.8 dollars.
+
+•	For every 1000 times increase in trip_seconds, there could be a increment in fare which will vary anywhere from 6.7 to 9.6 dollars. 
+
+•	For every 10 miles increase in trip_miles, fare can vary between -2.7 to 6.2 dollars. But it’s insignificant according to the model.
+
+•	Depending on the customer is using credit card as payment_type or not the fare will vary between -0.14 to 1.3 dollars.But it’s insignificant according to the model.
+
+
+# Question :5 Investigating relevant interactions.
+
+```{r}
+# Using Kitchen Sink Model: we will use all variable except taxi_id
+taxitrips_kit.out=lm(fare~. -taxi_id , data=clean.taxitrips)
+summary(taxitrips_kit.out)
+AIC(taxitrips_kit.out)
+
+
+```
+
+As trip_total has very high correlation with fare, so using it in the model is giving a warning messgae 
+("Warning message:
+In summary.lm(taxitrips_kit.out) :
+  essentially perfect fit: summary may be unreliable")
+and it is making the model way to perfect to analyze. So will remove trip_total column as well
+
+```{r}
+# removing taxi_id and trip_total
+taxitrips_kit.out=lm(fare~. -taxi_id -trip_total, data=clean.taxitrips)
+summary(taxitrips_kit.out)
+AIC(taxitrips_kit.out)
+
+
+
+#Adjusted R-square came down to 80.9% from 100% previously. We will also remove the tolls as it doesn't have any value and there is no impact of that column.
+
+# removing taxi_id, trip_total and tolls
+taxitrips_kit.out=lm(fare~. -taxi_id -trip_total-tolls, data=clean.taxitrips)
+summary(taxitrips_kit.out)
+AIC(taxitrips_kit.out)
+
+```
+After applying Kitchen Sink Model and excluding 3 columns taxi_id, trip_total and tolls, we are getting Adjusted R-square of 80.9% and the terms which have significant impact are Intercept, trip_seconds and tips
+```{r}
+#Stepwise Regression (both direction):
+#We will apply stepwise regression first to check the model performance and see which variable have significant impact.
+taxitrips_step.out=step(lm(fare~. -taxi_id -trip_total-tolls, data=clean.taxitrips),direction="both")
+summary(taxitrips_step.out)
+vif(taxitrips_step.out)
+
+#Stepwise Regression (backward direction):
+taxitrips_step_b.out=step(lm(fare~. -taxi_id -trip_total-tolls, data=clean.taxitrips),direction="backward")
+summary(taxitrips_step_b.out)
+vif(taxitrips_step_b.out)
+
+```
+Based on the output of the stepwise regression for both and backward direction we got same Adjusted R-square which is 80.8% and the terms which are significant are trips_seconds,tips and extras.Last model (for both and backward) is giving least AIC, so we can say it is best fit model as of now.
+
+```{r}
+# We try to see the model output after sqauring the terms.
+# Squaring trip_miles first
+
+taxitrips_sq.out=lm(formula = fare ~ trip_seconds + tips + extras + payment_type + trip_miles+I(trip_miles^2), data = clean.taxitrips)
+summary(taxitrips_sq.out)
+AIC(taxitrips_sq.out)
+vif(taxitrips_sq.out)
+
+# Adjusted R-square increased a bit to 82.3% and sqaured trip_miles term is also having some signifance impact. Also, based on the vif we can see that it is low and we dont have multicollinearity between the terms which is good because ideally vif should be less than 10 for a good model
+# Introducing cube to the equation
+
+taxitrips_cu.out=lm(formula = fare ~ trip_seconds + tips + extras + payment_type + trip_miles+I(trip_miles^2)+I(trip_miles^3), data = clean.taxitrips)
+summary(taxitrips_cu.out)
+AIC(taxitrips_cu.out)
+vif(taxitrips_cu.out)
+
+# Introducing cubic term has not changed Adjusted R-square much but it has removed the impact of sqaured trip_miles term also. Also, vif for some terms has increased way to high which tells us that there is high multicorrelation between those terms.So will remove cubic term and will try squaring the other terms like tips and extras
+
+# squaring tips terms along with miles
+
+taxitrips_sq.out=lm(formula = fare ~ trip_seconds + tips + extras + payment_type + trip_miles+I(trip_miles^2)+I(tips^2), data = clean.taxitrips)
+summary(taxitrips_sq.out)
+AIC(taxitrips_sq.out)
+vif(taxitrips_sq.out)
+
+# squared tips term is removing the signifiance of tips also. vif for some terms has increased way to high which tells us that there is high multicorrelation between those terms.Will remove it and introduce squared term for extras
+
+# squaring extras terms along with miles
+
+taxitrips_sq.out=lm(formula = fare ~ trip_seconds + tips + extras + payment_type + trip_miles+I(trip_miles^2)+I(extras^2), data = clean.taxitrips)
+summary(taxitrips_sq.out)
+AIC(taxitrips_sq.out)
+vif(taxitrips_sq.out)
+# Not much change in Adjusted R-square but the vif for the terms seems to be with 10 which is good. Before deciding this model as best model we will check for few more scenarios
+
+# Introducing squared terms for trip_miles,extras and tips
+
+taxitrips_sq.out=lm(formula = fare ~ trip_seconds + tips + extras + payment_type + trip_miles+I(trip_miles^2)+I(extras^2)+I(tips^2), data = clean.taxitrips)
+summary(taxitrips_sq.out)
+AIC(taxitrips_sq.out)
+vif(taxitrips_sq.out)
+# Adjusted R-sqaure dropped a bit and vif for some terms has increased a lot, so this model is not better that previous only.
+
+# Squared term for trip_miles and trip_seconds
+
+taxitrips_sq.out=lm(formula = fare ~ trip_seconds + tips + extras + payment_type + trip_miles+I(trip_miles^2)+I(trip_seconds^2), data = clean.taxitrips)
+summary(taxitrips_sq.out)
+AIC(taxitrips_sq.out)
+vif(taxitrips_sq.out)
+
+# Adjusted R-square has increased to 83.5 which is the best which we got till now.trip_miles and square of trip_miles are also having signifiance along with trip_seconds, tips,extras,square of trip_seconds. Also, vif looks good, although some of values are slightly greater than 10 but they not too high, everything below 20, which means those variables will have slighly multicollinearity amoung them. But overall this model looks the best
+```
+
+# Question : 6 Best Model
+```{r}
+# Out of all the models ran above the the best model output was generated when we introduced Squared term for trip_miles and trip_seconds
+```
+Consolidated results in the below table from all the models which are applied above. And based on those we can see that the last model which has squared terms for trip_miles and trip_seconds is giving us the best fit. It has greater adjusted R-square, less AIC as compared to what we get with other squared term model.  
+
+```{r}
+
+# Generating Regression output again for the best model
+taxitrips_sq.out=lm(formula = fare ~ trip_seconds + tips + extras + payment_type + trip_miles+I(trip_miles^2)+I(trip_seconds^2), data = clean.taxitrips)
+summary(taxitrips_sq.out)
+
+# LINE Conformity
+
+par(mfrow=c(2,2))
+plot(taxitrips_sq.out)
+par(mfrow=c(1,1))
+
+# Linearity:
+plot(clean.taxitrips$fare,taxitrips_sq.out$fitted.values,pch=19,main="Trips Actuals v.Fitted")
+abline(0,1,lwd=3,col="red")
+
+# Based on the above scatter plot we see that there is some linear relationship when the fare are less than 10 dollars but after that the values are scattered and it has some outliers. So we can say it sort of conform's Linearity but not very strongly.
+
+
+# Normality
+qqnorm(taxitrips_sq.out$residuals,pch=19,main="Trips Normality Plot")
+qqline(taxitrips_sq.out$residuals,lwd=3,col="red")
+
+# Ideally for a plot to be considered as normal it should have all the points falling on the line. But from the qq plot generated above we can see that its mostly normally distributed in the center but it has few outliers above and below the qq line which deviates it away. So, we can say it sort of conform's normality.
+
+
+# Equality of Variances
+plot(taxitrips_sq.out$fitted.values,rstandard(taxitrips_sq.out),pch=19)
+abline(0,0,col="red",lwd=3)
+
+# From the above plot, we can see that majority of the observations are concentrated around 0 because of which it looks like equally distributed but we have many outliers and extreme values also, so the model is not conforming Equality of variances.
+
+
+# Independence
+
+# We look for independence when it is time-series data and here we don’t have any time-series
+
+
+
+```
+
+# Question 7: #Identifying high leverage points.
+
+```{r}
+lev=hat(model.matrix(taxitrips_sq.out))
+plot(lev,pch=19,main="Leverage Plot, Taxi Trips")
+abline(3*mean(lev),0,col="red",lwd=3)
+clean.taxitrips[lev>(3*mean(lev)),]
+lev_points = clean.taxitrips[lev>(3*mean(lev)),1]
+
+
+# Removing high leverage points
+lev.taxitrips = clean.taxitrips[-which(clean.taxitrips$taxi_id %in% lev_points),]
+
+# Rerunning final model and Checking output after removing high leverage points
+trip_lev.out=lm(formula = fare ~ trip_seconds + tips + 
+extras + payment_type + trip_miles+I(trip_miles^2)+I(trip_seconds^2), data = lev.taxitrips)
+summary(trip_lev.out)
+
+# After removing the leverage points the model adjusted R-sqaure has decreased the signifiance of extra and sqaured trip_seconds has removed.
+
+```
+
+# Question 8: Creating new subset of 100 random records with new seed which is 09448095
+
+```{r}
+set.seed(09448095)
+newsubset.taxitrips=taxitrips[sample(1:nrow(taxitrips),100,replace=FALSE),]
+
+# Data Cleaning
+# Checking for missing values if any.
+summary(newsubset.taxitrips)
+# No NA/ NULLs in the means so we dont have any missing data
+# Checking if there are any 0 values in trip_seconds, because in ideal scenario trip_seconds should not be zero.If a trip was taken or even started there should be some elapsed time associated with it.
+nzero_tripseconds = newsubset.taxitrips[which(newsubset.taxitrips$trip_seconds == 0.0) ,]
+nzero_tripseconds
+# 8 such records are found, which seems to be bad data, so I will remove them from my subset.
+nnonzero.taxitrips = newsubset.taxitrips[-which(newsubset.taxitrips$trip_seconds == 0.0) ,]
+
+# Checking outliers in the data.
+# Outliers for trip_seconds
+
+par(mfrow=c(1,2))
+outliers_nts =boxplot(nnonzero.taxitrips$trip_seconds,main="trip_seconds_before")$out
+outliers_nts
+# Removing outliers for trip_seconds from the dataset
+newclean.taxitrips = nnonzero.taxitrips[-which(nnonzero.taxitrips$trip_seconds %in% outliers_nts),]
+boxplot(newclean.taxitrips$trip_seconds,main="trip_seconds_after")$out
+par(mfrow=c(1,1))
+
+# Checking outliers for trip_miles
+par(mfrow=c(1,2))
+outliers_ntm = boxplot(newclean.taxitrips$trip_miles,main="trip_miles_before")$out
+outliers_ntm
+# Removing outliers for trip_miles from the dataset
+newclean.taxitrips = newclean.taxitrips[-which(newclean.taxitrips$trip_miles %in% outliers_ntm),]
+boxplot(newclean.taxitrips$trip_miles,main="trip_miles_after")$out
+par(mfrow=c(1, 1))
+
+# Checking outliers for fare
+par(mfrow=c(1,2))
+boxplot(newclean.taxitrips$fare,main="fare_before")$out
+# Removing 1 extreme outlier for fare from the dataset
+newclean.taxitrips = newclean.taxitrips[-which(newclean.taxitrips$fare == 41.75),]
+boxplot(newclean.taxitrips$fare,main="fare_after")$out
+par(mfrow=c(1, 1))
+
+# After cleaning Outliers from trip_seconds, trip_miles and fare, checking outliers for remaining variables.
+boxplot(newclean.taxitrips$tips,main="tips")$out
+# No outliers for tips
+boxplot(newclean.taxitrips$tolls,main="tolls")$out
+# No outliers for tolls
+boxplot(newclean.taxitrips$extras,main="extras")$out
+# 1 outliers for extras
+boxplot(newclean.taxitrips$trip_total,main="trip_total")$out
+# 3 outliers for trip_total but there are not very extreme, so I will keep them as is.
+
+# So finally we are left with 72 observations which is the primary dataset for analysis
+# Base Model : using fare as dependent and trip_seconds, trip_miles and payment_type as independent variables(Question 4)
+  
+newtaxitrips.out =lm(formula = fare ~ trip_seconds + payment_type + trip_miles, data = newclean.taxitrips)
+summary(newtaxitrips.out)
+AIC(newtaxitrips.out)
+vif(newtaxitrips.out)
+
+# We got Adjusted R-square of 68.6% and trip_seconds and trip_miles are having an signifianct impact on fare.
+# Applying the best model generated out of all the models ran above the model output came when we introduced Squared term for trip_miles and trip_seconds and comparing to based model
+
+
+newtaxitrips_sq.out=step(lm(formula = fare ~ trip_seconds + tips + extras 
++ payment_type + trip_miles, data = newclean.taxitrips))
+summary(newtaxitrips_sq.out)
+AIC(newtaxitrips_sq.out)
+vif(newtaxitrips_sq.out)
+# Adjusted R-square increased to 74% and now only remaining significant terms are trip_miles, sqaure of trip_miles and trip_seconds
+
+newtaxitrips_sq.out=lm(formula = fare ~ trip_seconds + tips + extras 
++ payment_type + trip_miles+I(trip_miles^2)+I(trip_seconds^2), data = newclean.taxitrips)
+summary(newtaxitrips_sq.out)
+AIC(newtaxitrips_sq.out)
+vif(newtaxitrips_sq.out)
+
+# LINE Conformity
+
+par(mfrow=c(2,2))
+plot(newtaxitrips_sq.out)
+par(mfrow=c(1,1))
+
+#Linearity:
+plot(newclean.taxitrips$fare,newtaxitrips_sq.out$fitted.values,pch=19,main="Trips Actuals v.Fitted")
+abline(0,1,lwd=3,col="red")
+
+#Based on the above scatter plot we see that there is linear relationship when the fare is less than 15 dollars and there are few outliers also specially at the upper end. In this case we can strongly conform the Linearity.
+
+#Normality
+qqnorm(newtaxitrips_sq.out$residuals,pch=19,main="Trips Normality Plot")
+qqline(newtaxitrips_sq.out$residuals,lwd=3,col="red")
+
+# From the qq plot generated above we can see that its mostly normally distributed in the center and has couple of outliers above and below the qq line which deviates it away. It strongly conforms the normality.
+
+
+#Equality of Variances
+plot(newtaxitrips_sq.out$fitted.values,rstandard(newtaxitrips_sq.out),pch=19)
+abline(0,0,col="red",lwd=3)
+
+#From the above plot, we can see that majority of the observations are concentrated around 0 because of which it looks like equally distributed but we have few outliers and extreme values also, so for this case we can say that model is sort of conforming equalirt of variances.
+
+#Independence
+
+#We look for independence when it is time-series data and here we don’t have any time-series
+
+```
